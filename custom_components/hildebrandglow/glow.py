@@ -130,11 +130,8 @@ class Glow:
         """Receive a PUBLISH message from the server."""
         payload = MQTTPayload(msg.payload)
 
-        if "electricity.consumption" in self.sensors:
-            self.sensors["electricity.consumption"].update_state(payload)
-
-        if "gas.consumption" in self.sensors:
-            self.sensors["gas.consumption"].update_state(payload)
+        for sensor in self.sensors.values():
+            sensor.update_state(payload)
 
     def retrieve_resources(self) -> List[Dict[str, Any]]:
         """Retrieve the resources known to Glowmarkt for the authenticated user."""
@@ -172,7 +169,7 @@ class Glow:
         self, sensor: GlowConsumptionCurrent, resource: Dict[str, Any]
     ) -> None:
         """Register a live sensor for dispatching MQTT messages."""
-        self.sensors[resource["classifier"]] = sensor
+        self.sensors[sensor.unique_id] = sensor
 
 
 class CannotConnect(exceptions.HomeAssistantError):

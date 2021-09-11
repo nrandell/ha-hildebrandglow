@@ -1,9 +1,16 @@
 """Platform for sensor integration."""
 from typing import Any, Callable, Dict, Optional
 
+from homeassistant.components.sensor import STATE_CLASS_TOTAL_INCREASING
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import DEVICE_CLASS_POWER, POWER_WATT, VOLUME_CUBIC_METERS
-from homeassistant.core import HomeAssistant
+from homeassistant.const import (
+    DEVICE_CLASS_ENERGY,
+    DEVICE_CLASS_POWER,
+    ENERGY_WATT_HOUR,
+    POWER_WATT,
+    VOLUME_CUBIC_METERS,
+)
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo, Entity
 
 from .const import DOMAIN
@@ -28,8 +35,13 @@ async def async_setup_entry(
             return False
 
         for resource in resources:
-            if resource["classifier"] in GlowConsumptionCurrent.knownClassifiers:
-                sensor = GlowConsumptionCurrent(glow, resource)
+            if resource["classifier"] in GlowInstantaneousDemand.knownClassifiers:
+                sensor = GlowInstantaneousDemand(glow, resource)
+                glow.register_sensor(sensor, resource)
+                new_entities.append(sensor)
+
+            if resource["classifier"] in GlowCurrentSummationDelivered.knownClassifiers:
+                sensor = GlowCurrentSummationDelivered(glow, resource)
                 glow.register_sensor(sensor, resource)
                 new_entities.append(sensor)
 
@@ -38,12 +50,10 @@ async def async_setup_entry(
     return True
 
 
-class GlowConsumptionCurrent(Entity):
+class GlowConsumption(Entity):
     """Sensor object for the Glowmarkt resource's current consumption."""
 
     hass: HomeAssistant
-
-    knownClassifiers = ["gas.consumption", "electricity.consumption"]
 
     _state: Optional[Meter]
     available = True
@@ -54,16 +64,6 @@ class GlowConsumptionCurrent(Entity):
         self._state = None
         self.glow = glow
         self.resource = resource
-
-    @property
-    def unique_id(self) -> str:
-        """Return a unique identifier string for the sensor."""
-        return self.resource["resourceId"]
-
-    @property
-    def name(self) -> str:
-        """Return the name of the sensor."""
-        return self.resource["label"]
 
     @property
     def icon(self) -> Optional[str]:
@@ -88,8 +88,24 @@ class GlowConsumptionCurrent(Entity):
             "name": f"Smart Meter, {human_type}",
         }
 
+
+class GlowInstantaneousDemand(GlowConsumption):
+    """Sensor object for the Glowmarkt resource's current consumption."""
+
+    knownClassifiers = ["gas.consumption", "electricity.consumption"]
+
     @property
-    def state(self) -> Optional[int]:
+    def unique_id(self) -> str:
+        """Return a unique identifier string for the sensor."""
+        return self.resource["resourceId"]
+
+    @property
+    def name(self) -> str:
+        """Return the name of the sensor."""
+        return self.resource["label"]
+
+    @property
+    def native_value(self) -> Optional[int]:
         """Return the state of the sensor."""
         if self._state:
             if self.resource["dataSourceResourceTypeInfo"]["type"] == "ELEC":
@@ -98,11 +114,6 @@ class GlowConsumptionCurrent(Entity):
                 alt = self._state.alternative_historical_consumption
                 return alt.current_day_consumption_delivered
         return None
-
-    def update_state(self, meter: MQTTPayload) -> None:
-        """Receive an MQTT update from Glow and update the internal state."""
-        self._state = meter.electricity
-        self.hass.add_job(self.async_write_ha_state)
 
     @property
     def device_class(self) -> str:
@@ -119,3 +130,57 @@ class GlowConsumptionCurrent(Entity):
                 return VOLUME_CUBIC_METERS
 
         return None
+
+    def update_state(self, meter: MQTTPayload) -> None:
+        """Receive an MQTT update from Glow and update the internal state."""
+        self._state = meter.electricity
+        self.hass.add_job(self.async_write_ha_state)
+
+
+class GlowCurrentSummationDelivered(GlowConsumption):
+    """Sensor object for the Glowmarkt resource's current summation delivered metric."""
+
+    knownClassifiers = ["gas.consumption", "electricity.consumption"]
+
+    @property
+    def unique_id(self) -> str:
+        """Return a unique identifier string for the sensor."""
+        return "{}-CurrentSummationDelivered".format(self.resource["resourceId"])
+
+    @property
+    def name(self) -> str:
+        """Return the name of the sensor."""
+        return "{}-CurrentSummationDelivered".format(self.resource["label"])
+
+    @property
+    def state(self) -> Optional[int]:
+        """Return the state of the sensor."""
+        if self._state:
+            return self._state.reading_information_set.current_summation_delivered
+        return None
+
+    @property
+    def device_class(self) -> str:
+        """Return the device class (always DEVICE_CLASS_ENERGY)."""
+        return DEVICE_CLASS_ENERGY
+
+    @property
+    def state_class(self) -> str:
+        """Return the device Long-term Statistics state class (always STATE_CLASS_TOTAL_INCREASING)."""
+        return STATE_CLASS_TOTAL_INCREASING
+
+    @property
+    def unit_of_measurement(self) -> Optional[str]:
+        """Return the unit of measurement."""
+        if self._state is not None:
+            if self.resource["dataSourceResourceTypeInfo"]["type"] == "ELEC":
+                return ENERGY_WATT_HOUR
+            elif self.resource["dataSourceResourceTypeInfo"]["type"] == "GAS":
+                return VOLUME_CUBIC_METERS
+
+        return None
+
+    def update_state(self, meter: MQTTPayload) -> None:
+        """Receive an MQTT update from Glow and update the internal state."""
+        self._state = meter.electricity
+        self.hass.add_job(self.async_write_ha_state)
