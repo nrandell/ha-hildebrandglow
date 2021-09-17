@@ -1,7 +1,7 @@
 """Platform for sensor integration."""
 from typing import Any, Callable, Dict, Optional
 
-from homeassistant.components.sensor import STATE_CLASS_TOTAL_INCREASING
+from homeassistant.components.sensor import STATE_CLASS_TOTAL_INCREASING, SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import DEVICE_CLASS_POWER, POWER_WATT, VOLUME_CUBIC_METERS
 from homeassistant.core import HomeAssistant
@@ -39,7 +39,7 @@ async def async_setup_entry(
     return True
 
 
-class GlowConsumptionCurrent(Entity):
+class GlowConsumptionCurrent(Entity, SensorEntity):
     """Sensor object for the Glowmarkt resource's current consumption."""
 
     hass: HomeAssistant
