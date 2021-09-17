@@ -3,7 +3,7 @@ from typing import Any, Callable, Dict, Optional
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import DEVICE_CLASS_POWER, POWER_WATT, VOLUME_CUBIC_METERS
-from homeassistant.core import HomeAssistant
+from homeassistant.core import STATE_CLASS_TOTAL_INCREASING, HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo, Entity
 
 from .const import DOMAIN
@@ -108,6 +108,11 @@ class GlowConsumptionCurrent(Entity):
     def device_class(self) -> str:
         """Return the device class (always DEVICE_CLASS_POWER)."""
         return DEVICE_CLASS_POWER
+
+    @property
+    def state_class(self) -> str:
+        """Return the state class (always STATE_CLASS_TOTAL_INCREASING)."""
+        return STATE_CLASS_TOTAL_INCREASING
 
     @property
     def unit_of_measurement(self) -> Optional[str]:
